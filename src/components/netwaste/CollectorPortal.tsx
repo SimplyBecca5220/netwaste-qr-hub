@@ -218,7 +218,7 @@ function AnimatedPoints({ value }: { value: number }) {
 export function CollectorPortal() {
   const [points, setPoints] = useState(collectorProfile.points);
   const [totalKg, setTotalKg] = useState(collectorProfile.totalKg);
-  const [hubId, setHubId] = useState(hubs[0].id);
+  const [hubId, setHubId] = useState(hubs[0]?.id ?? "nsd-main");
   const [material, setMaterial] = useState<MaterialKey>("pet");
   const [weight, setWeight] = useState(2);
   const [scannerOpen, setScannerOpen] = useState(false);
