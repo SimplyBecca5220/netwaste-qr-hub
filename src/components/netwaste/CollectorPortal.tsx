@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ScanLine,
   Minus,
@@ -12,6 +12,9 @@ import {
   Trophy,
   Wallet,
   Recycle,
+  ImageUp,
+  Zap,
+  CameraOff,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -22,18 +25,155 @@ import {
   type MaterialKey,
   type Reward,
 } from "@/lib/netwaste-data";
+import type { Html5Qrcode } from "html5-qrcode";
+
+/* ---------------- Hub matching from scanned text ---------------- */
+const HUB_HINTS: Record<string, string[]> = {
+  "nsd-main": ["nsd-jetty", "jetty", "nsd-main", "main hub", "nsidung jetty"],
+  "fish-market": ["fish market", "fish-market", "corridor", "nsd-fish"],
+  "beach-landing": ["beach landing", "beach-landing", "landing post", "nsd-beach"],
+};
+
+function matchHubFromText(text: string): string | null {
+  const t = text.toLowerCase();
+  for (const hub of hubs) {
+    if (t.includes(hub.name.toLowerCase()) || t.includes(hub.id)) return hub.id;
+  }
+  for (const [hubId, hints] of Object.entries(HUB_HINTS)) {
+    if (hints.some((h) => t.includes(h))) return hubId;
+  }
+  return null;
+}
+
+/* Short confirmation beep via WebAudio (no asset needed) */
+function playBeep() {
+  try {
+    const Ctx =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.setValueAtTime(1320, ctx.currentTime + 0.09);
+    gain.gain.setValueAtTime(0.18, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.25);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.26);
+    osc.onended = () => void ctx.close().catch(() => undefined);
+  } catch {
+    /* audio unsupported — ignore */
+  }
+}
 
 /* ---------------- QR Scanner modal ---------------- */
-function ScannerModal({ onClose }: { onClose: () => void }) {
-  useEffect(() => {
-    const t = setTimeout(() => {
-      toast.success("Station verified", {
-        description: "Nsidung Jetty Main Hub · Station QR matched",
+function ScannerModal({
+  onClose,
+  onHubDetected,
+}: {
+  onClose: () => void;
+  onHubDetected: (hubId: string, rawText: string) => void;
+}) {
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const handlingRef = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [fileBusy, setFileBusy] = useState(false);
+
+  const stopCamera = useCallback(async () => {
+    const scanner = scannerRef.current;
+    scannerRef.current = null;
+    if (!scanner) return;
+    try {
+      if (scanner.isScanning) await scanner.stop();
+    } catch {
+      /* already stopped */
+    }
+    try {
+      await scanner.clear();
+    } catch {
+      /* already cleared */
+    }
+  }, []);
+
+  const handleResult = useCallback(
+    (text: string) => {
+      if (handlingRef.current) return;
+      handlingRef.current = true;
+      navigator.vibrate?.(120);
+      playBeep();
+      const hubId = matchHubFromText(text);
+      const targetHub = hubId ?? hubs[0]!.id;
+      const hubName = hubs.find((h) => h.id === targetHub)?.name ?? targetHub;
+      onHubDetected(targetHub, text);
+      toast.success(`Station QR Verified: ${text}`, {
+        description: hubId
+          ? `${hubName} selected automatically.`
+          : `Closest match: ${hubName}.`,
       });
-      onClose();
-    }, 3200);
-    return () => clearTimeout(t);
-  }, [onClose]);
+      void stopCamera().then(onClose);
+    },
+    [onClose, onHubDetected, stopCamera],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { Html5Qrcode } = await import("html5-qrcode");
+        if (cancelled) return;
+        const scanner = new Html5Qrcode("qr-reader", { verbose: false });
+        scannerRef.current = scanner;
+        await scanner.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 210, height: 210 } },
+          (decodedText) => {
+            void stopCamera().then(() => handleResult(decodedText));
+          },
+          () => undefined,
+        );
+      } catch {
+        if (!cancelled)
+          setCameraError("Camera unavailable — use the simulate button or upload a QR image below.");
+      }
+    })();
+    return () => {
+      cancelled = true;
+      void stopCamera();
+    };
+  }, [handleResult, stopCamera]);
+
+  const onFilePicked = async (file: File | null) => {
+    if (!file) return;
+    setFileBusy(true);
+    try {
+      await stopCamera();
+      const { Html5Qrcode } = await import("html5-qrcode");
+      const scanner = new Html5Qrcode("qr-reader-file", { verbose: false });
+      const text = await scanner.scanFileV2(file, true).then((r) => r.decodedText);
+      try {
+        await scanner.clear();
+      } catch {
+        /* ignore */
+      }
+      handleResult(text);
+    } catch {
+      toast.error("No QR code found in that image", {
+        description: "Try a clearer photo of the station QR code.",
+      });
+      setFileBusy(false);
+    }
+  };
+
+  const simulate = () => {
+    void stopCamera().then(() =>
+      handleResult("NSD-JETTY | Nsidung Jetty Main Hub | PROTEGO Station"),
+    );
+  };
 
   return (
     <div
@@ -41,34 +181,77 @@ function ScannerModal({ onClose }: { onClose: () => void }) {
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm rounded-t-3xl bg-navy p-6 pb-10 text-navy-foreground animate-drawer-up sm:rounded-3xl sm:pb-6"
+        className="max-h-[92vh] w-full max-w-sm overflow-y-auto rounded-t-3xl bg-navy p-6 pb-10 text-navy-foreground animate-drawer-up sm:rounded-3xl sm:pb-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
           <h3 className="font-display text-lg font-bold">Scan Station QR</h3>
           <button
-            onClick={onClose}
-            aria-label="Close scanner"
+            onClick={() => void stopCamera().then(onClose)}
+            aria-label="Close camera"
             className="grid h-9 w-9 place-items-center rounded-full bg-white/10 transition hover:bg-white/20"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="relative mx-auto aspect-square w-full max-w-[260px] overflow-hidden rounded-2xl bg-navy-soft">
+
+        {/* Camera viewfinder with reticle overlay */}
+        <div className="relative mx-auto aspect-square w-full max-w-[280px] overflow-hidden rounded-2xl bg-navy-soft">
+          <div id="qr-reader" className="absolute inset-0 [&_video]:h-full [&_video]:w-full [&_video]:object-cover" />
           {/* corner brackets */}
           {["left-3 top-3 border-l-4 border-t-4 rounded-tl-xl",
             "right-3 top-3 border-r-4 border-t-4 rounded-tr-xl",
             "left-3 bottom-3 border-l-4 border-b-4 rounded-bl-xl",
             "right-3 bottom-3 border-r-4 border-b-4 rounded-br-xl",
           ].map((pos) => (
-            <span key={pos} className={`absolute h-10 w-10 border-recovery ${pos}`} />
+            <span key={pos} className={`pointer-events-none absolute z-10 h-10 w-10 border-recovery ${pos}`} />
           ))}
-          <span className="absolute left-4 right-4 h-0.5 rounded-full bg-recovery shadow-[0_0_18px_4px] shadow-recovery/60 animate-scan-line" />
-          <ScanLine className="absolute inset-0 m-auto h-12 w-12 text-navy-foreground/30" />
+          {!cameraError && (
+            <span className="pointer-events-none absolute left-5 right-5 z-10 h-0.5 rounded-full bg-recovery shadow-[0_0_18px_4px] shadow-recovery/60 animate-scan-line" />
+          )}
+          {cameraError && (
+            <div className="absolute inset-0 z-10 grid place-items-center p-5 text-center">
+              <div>
+                <CameraOff className="mx-auto mb-2 h-8 w-8 text-navy-foreground/50" />
+                <p className="text-xs text-navy-foreground/70">{cameraError}</p>
+              </div>
+            </div>
+          )}
         </div>
+        {/* Hidden mount point for file decoding */}
+        <div id="qr-reader-file" className="hidden" />
+
         <p className="mt-4 text-center text-sm text-navy-foreground/70">
-          Point your camera at the hub station QR code…
+          Point your back camera at the hub station QR code…
         </p>
+
+        {/* Desktop / testing fallbacks */}
+        <div className="mt-4 space-y-2">
+          <button
+            onClick={simulate}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-recovery py-3 text-sm font-bold text-recovery-foreground transition hover:brightness-110 active:scale-[0.98]"
+          >
+            <Zap className="h-4 w-4" /> Simulate Scan (Nsidung Jetty Hub)
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              void onFilePicked(e.target.files?.[0] ?? null);
+              e.target.value = "";
+            }}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={fileBusy}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/5 py-3 text-sm font-semibold transition hover:bg-white/10 disabled:opacity-50"
+          >
+            <ImageUp className="h-4 w-4" />
+            {fileBusy ? "Decoding image…" : "Upload QR image"}
+          </button>
+        </div>
       </div>
     </div>
   );
