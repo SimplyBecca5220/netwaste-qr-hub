@@ -25,6 +25,7 @@ import {
   type MaterialKey,
   type Reward,
 } from "@/lib/netwaste-data";
+import { initials, type NetwasteUser } from "@/lib/netwaste-auth";
 import type { Html5Qrcode } from "html5-qrcode";
 
 /* ---------------- Hub matching from scanned text ---------------- */
@@ -398,9 +399,10 @@ function AnimatedPoints({ value }: { value: number }) {
 }
 
 /* ---------------- Main portal ---------------- */
-export function CollectorPortal() {
-  const [points, setPoints] = useState(collectorProfile.points);
-  const [totalKg, setTotalKg] = useState(collectorProfile.totalKg);
+export function CollectorPortal({ user }: { user?: NetwasteUser }) {
+  const profile = user ?? collectorProfile;
+  const [points, setPoints] = useState(profile.points);
+  const [totalKg, setTotalKg] = useState(profile.totalKg);
   const [hubId, setHubId] = useState(hubs[0]?.id ?? "nsd-main");
   const [material, setMaterial] = useState<MaterialKey>("pet");
   const [weight, setWeight] = useState(2);
@@ -442,17 +444,22 @@ export function CollectorPortal() {
         <div className="relative flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-teal font-display text-lg font-black text-teal-foreground">
-              EB
+              {initials(profile.name) || "NW"}
             </div>
             <div className="min-w-0">
-              <p className="truncate font-display text-lg font-bold">{collectorProfile.name}</p>
+              <p className="truncate font-display text-lg font-bold">{profile.name}</p>
               <p className="text-xs text-navy-foreground/60">
-                Collector ID {collectorProfile.id} · {collectorProfile.rank}
+                Collector ID {profile.id} · {profile.rank}
               </p>
+              {user?.location && (
+                <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-navy-foreground/80">
+                  <MapPin className="h-3 w-3 text-teal" /> {user.location}
+                </span>
+              )}
             </div>
           </div>
           <span className="flex shrink-0 items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold">
-            <Flame className="h-3.5 w-3.5 text-amber-warm" /> {collectorProfile.streak}-day streak
+            <Flame className="h-3.5 w-3.5 text-amber-warm" /> {profile.streak}-day streak
           </span>
         </div>
         <div className="relative mt-5 grid grid-cols-2 gap-3">
