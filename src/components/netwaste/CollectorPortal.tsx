@@ -444,17 +444,22 @@ export function CollectorPortal({ user }: { user?: NetwasteUser }) {
         <div className="relative flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-teal font-display text-lg font-black text-teal-foreground">
-              EB
+              {initials(profile.name) || "NW"}
             </div>
             <div className="min-w-0">
-              <p className="truncate font-display text-lg font-bold">{collectorProfile.name}</p>
+              <p className="truncate font-display text-lg font-bold">{profile.name}</p>
               <p className="text-xs text-navy-foreground/60">
-                Collector ID {collectorProfile.id} · {collectorProfile.rank}
+                Collector ID {profile.id} · {profile.rank}
               </p>
+              {user?.location && (
+                <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-navy-foreground/80">
+                  <MapPin className="h-3 w-3 text-teal" /> {user.location}
+                </span>
+              )}
             </div>
           </div>
           <span className="flex shrink-0 items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold">
-            <Flame className="h-3.5 w-3.5 text-amber-warm" /> {collectorProfile.streak}-day streak
+            <Flame className="h-3.5 w-3.5 text-amber-warm" /> {profile.streak}-day streak
           </span>
         </div>
         <div className="relative mt-5 grid grid-cols-2 gap-3">
