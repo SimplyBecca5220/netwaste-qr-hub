@@ -25,6 +25,7 @@ import {
   type MaterialKey,
   type Reward,
 } from "@/lib/netwaste-data";
+import { initials, type NetwasteUser } from "@/lib/netwaste-auth";
 import type { Html5Qrcode } from "html5-qrcode";
 
 /* ---------------- Hub matching from scanned text ---------------- */
