@@ -596,7 +596,12 @@ export function CollectorPortal() {
         <ChevronDown className="h-5 w-5 -rotate-90 text-muted-foreground" />
       </button>
 
-      {scannerOpen && <ScannerModal onClose={() => setScannerOpen(false)} />}
+      {scannerOpen && (
+        <ScannerModal
+          onClose={() => setScannerOpen(false)}
+          onHubDetected={(hub) => setHubId(hub)}
+        />
+      )}
       <RewardsDrawer
         open={drawerOpen}
         balance={points}
