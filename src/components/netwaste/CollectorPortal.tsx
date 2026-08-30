@@ -398,9 +398,10 @@ function AnimatedPoints({ value }: { value: number }) {
 }
 
 /* ---------------- Main portal ---------------- */
-export function CollectorPortal() {
-  const [points, setPoints] = useState(collectorProfile.points);
-  const [totalKg, setTotalKg] = useState(collectorProfile.totalKg);
+export function CollectorPortal({ user }: { user?: NetwasteUser }) {
+  const profile = user ?? collectorProfile;
+  const [points, setPoints] = useState(profile.points);
+  const [totalKg, setTotalKg] = useState(profile.totalKg);
   const [hubId, setHubId] = useState(hubs[0]?.id ?? "nsd-main");
   const [material, setMaterial] = useState<MaterialKey>("pet");
   const [weight, setWeight] = useState(2);
